@@ -403,9 +403,46 @@ write_tifxyz(
     compression='lzw',   # TIFF compression
     tile_size=1024,      # TIFF tile size
     write_mask=True,     # Write mask.tif
+    write_isometry=True, # Store the grid's "isometry" block in meta.json
     overwrite=False,     # Overwrite existing
 )
 ```
+
+### Grid isometry (`meta.json` → `isometry`)
+
+`scale` promises a step of `1 / scale` voxels between neighbouring grid nodes. The
+`isometry` block records whether the saved grid keeps that promise, so segments can be
+compared and stretched parts of a sheet found without rendering them. `write_tifxyz`
+stores it by default; `vesuvius.tifxyz.isometry` computes it for any grid and backfills
+published segments:
+
+```bash
+# Print the block for a segment, or also store it in its meta.json (grid untouched)
+python -m vesuvius.tifxyz.isometry /path/to/segment.tifxyz
+python -m vesuvius.tifxyz.isometry /path/to/segment.tifxyz --write
+```
+
+```python
+from vesuvius.tifxyz import compute_grid_isometry, isometry_for_surface
+
+block = isometry_for_surface(surface)                 # a Tifxyz, on its stored grid
+block = compute_grid_isometry(xyz, step=(su, sv))     # any (H, W, 3) grid; step = 1 / scale
+```
+
+| Field | Meaning |
+|-------|---------|
+| `version` | 1; the thresholds below are fixed per version, so numbers stay comparable |
+| `step_vx` | `[1/scale[0], 1/scale[1]]`, the promised step along columns and rows |
+| `edges` | grid edges with both ends valid |
+| `within_10pct`, `within_25pct` | share of those edges within a factor of 1.1 and 1.25 of the step |
+| `median_abs_log_ratio` | median of abs(log(edge / step)); stretch and squash count alike |
+| `area_ratio` | two triangles per complete cell over `cells × step_u × step_v` (1 for a perfect grid) |
+| `angle_deg` | grid angle p5, p50, p95 (90 is ideal) |
+| `stretched_nodes`, `stretched_area_vx2` | nodes touching an edge more than 1.5× longer or shorter than the step, and their area at one cell per node |
+| `l2_mean`, `l2_median`, `linf`, `area_error` | flatboi's stretch metrics with the grid itself as the flattening (L2 = Linf = 1 when isometric) |
+
+Statistics that need an edge or a complete cell are `null` when the grid has none. Values
+are rounded (four decimals, angles one) so the stored block is stable across machines.
 
 ### TifxyzReader
 

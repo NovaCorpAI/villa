@@ -13,6 +13,7 @@ from uuid import uuid4
 import numpy as np
 import tifffile
 
+from .isometry import isometry_for_surface, store_isometry_meta
 from .types import Tifxyz
 from .upsampling import compute_grid_bounds
 
@@ -26,6 +27,7 @@ def write_tifxyz(
     compression: Optional[str] = "lzw",
     tile_size: Optional[int] = 1024,
     write_mask: bool = True,
+    write_isometry: bool = True,
     overwrite: bool = False,
 ) -> Path:
     """Write a Tifxyz object to a tifxyz directory.
@@ -44,6 +46,9 @@ def write_tifxyz(
         be memory-mapped as written (VC3D's mmap layout).
     write_mask : bool
         If True, write mask.tif. Default True.
+    write_isometry : bool
+        If True, store the grid's ``isometry`` block in meta.json (see
+        :mod:`vesuvius.tifxyz.isometry`). Default True.
     overwrite : bool
         If True, overwrite existing files. Default False.
 
@@ -63,7 +68,7 @@ def write_tifxyz(
         tile_size=tile_size,
         overwrite=overwrite,
     )
-    return writer.write(surface, write_mask=write_mask)
+    return writer.write(surface, write_mask=write_mask, write_isometry=write_isometry)
 
 
 class TifxyzWriter:
@@ -166,6 +171,7 @@ class TifxyzWriter:
         self,
         surface: Tifxyz,
         bbox: Optional[tuple] = None,
+        isometry: Optional[dict] = None,
     ) -> None:
         """Write meta.json.
 
@@ -175,6 +181,10 @@ class TifxyzWriter:
             Surface to get metadata from.
         bbox : Optional[tuple]
             Override bounding box. If None, uses surface.bbox.
+        isometry : Optional[dict]
+            The grid's ``isometry`` block to store. If None, no block is
+            computed here (one carried in ``surface.extra`` is still written
+            as-is).
         """
         # The surface's persistent identity is written as-is (callers
         # creating a new surface pass a fresh uuid4); an unset one is
@@ -208,6 +218,11 @@ class TifxyzWriter:
 
         # Add extra fields
         meta_dict.update(surface.extra)
+
+        # The grid as written decides the isometry block, so a fresh one
+        # replaces whatever a previously read surface carried in extra.
+        if isometry is not None:
+            store_isometry_meta(meta_dict, isometry)
 
         # Write JSON
         output_path = self.path / "meta.json"
@@ -252,6 +267,7 @@ class TifxyzWriter:
         surface: Tifxyz,
         *,
         write_mask: bool = True,
+        write_isometry: bool = True,
     ) -> Path:
         """Write complete surface.
 
@@ -264,6 +280,9 @@ class TifxyzWriter:
             Surface to write.
         write_mask : bool
             If True, write mask.tif.
+        write_isometry : bool
+            If True, compute the grid's ``isometry`` block and store it in
+            meta.json.
 
         Returns
         -------
@@ -296,7 +315,8 @@ class TifxyzWriter:
             )
 
             # Write metadata
-            self.write_metadata(surface, bbox=bbox)
+            isometry = isometry_for_surface(surface) if write_isometry else None
+            self.write_metadata(surface, bbox=bbox, isometry=isometry)
 
             # Write mask
             if write_mask:

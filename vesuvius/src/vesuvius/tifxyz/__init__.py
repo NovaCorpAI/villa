@@ -35,6 +35,12 @@ from .reader import (
     load_folder,
     read_tifxyz,
 )
+from .isometry import (
+    ISOMETRY_VERSION,
+    compute_grid_isometry,
+    isometry_for_surface,
+    store_isometry_meta,
+)
 from .types import Tifxyz
 from .upsampling import (
     catmull_rom_smooth_1d,
@@ -58,6 +64,11 @@ __all__ = [
     # Writer
     "write_tifxyz",
     "TifxyzWriter",
+    # Grid isometry (meta.json "isometry" block)
+    "ISOMETRY_VERSION",
+    "compute_grid_isometry",
+    "isometry_for_surface",
+    "store_isometry_meta",
     # Upsampling utilities
     "upsample_coordinates",
     "interpolate_at_points",
